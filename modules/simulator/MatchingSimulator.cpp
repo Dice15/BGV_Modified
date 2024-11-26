@@ -94,6 +94,10 @@ std::pair<double, std::vector<int>> MatchingSimulator::integer_matching(const st
         integer_matching_hash_rotation(new_text, new_pattern, matched);
         break;
     }
+    case integer_matching_type::hash_power: {
+        integer_matching_hash_power(new_text, new_pattern, matched);
+        break;
+    }
     default:
         throw std::invalid_argument("Unsupported matching type");
     }
@@ -492,6 +496,131 @@ void MatchingSimulator::integer_matching_hash_rotation(std::vector<int64_t> text
                 if (hashing_result == hash[rot][i]) {
                     matched.push_back(static_cast<int64_t>(i) - pattern_size + 1 + rot);
                 }
+            }
+        }
+    };
+
+    alice();
+}
+
+void MatchingSimulator::integer_matching_hash_power(std::vector<int64_t> text, std::vector<int64_t> pattern, std::vector<int>& matched) {
+    //text = { 1, 2, 3, 4, 1, 2, 3, 4};
+    //pattern = { 3, 4 };
+    // random module
+    RandomGenerator rand;
+
+
+    // create bgv
+    SEALHelper& bgv = SEALBuilder(seal::scheme_type::bgv, seal::sec_level_type::tc128, 8192, { 40, 30, 30, 30, 40 }, 31, false)
+        .create_secret_key()
+        .create_public_key()
+        .create_relin_keys()
+        .build();
+
+
+    // get plain modulus prime
+    int64_t prime = bgv.plain_modulus_prime();
+
+
+    // varify that input is valid
+    int64_t unique_int_cnt = std::max(
+        *std::max_element(text.begin(), text.end()),
+        *std::max_element(pattern.begin(), pattern.end())
+    );
+
+    int64_t max_power = static_cast <int64_t>(std::pow(static_cast <int64_t>(2), static_cast<int64_t>((2 * unique_int_cnt) - 1)));
+    int64_t max_sum = max_power * static_cast <int64_t>(pattern.size());
+
+    std::cout << unique_int_cnt << ' ' << max_power << ' ' << max_sum << ' ' << prime / 2 << '\n';
+    if (max_sum > prime / 2)
+    {
+        throw std::invalid_argument("2^(2 * unique_int_cnt - 1) * pattern_size must not bigger than prime / 2");
+    }
+
+    // calculate power and mapping
+    std::vector<int64_t> powers;
+    std::unordered_map<int64_t, int32_t> int2power_map;
+
+    uint64_t power = 1;
+
+    powers.reserve(unique_int_cnt + 1);
+
+    while (static_cast <int64_t>(powers.size()) <= unique_int_cnt) {
+        powers.push_back(power);
+        power *= 2;
+    }
+
+    int32_t int_value = 1;
+    for (int32_t i = 0; i < unique_int_cnt; i++) {
+        int2power_map.insert({ int_value++, i });
+    }
+
+    std::cout << static_cast <int64_t>(pattern.size()) * powers[unique_int_cnt] << '\n';
+    // create Bob function
+    auto bob = [&](seal::Ciphertext& pattern_enc) {
+        seal::Plaintext text_pln;
+
+        for (auto& e : text) {
+            e = powers[int2power_map[e]];
+        }
+
+        std::reverse(text.begin(), text.end());
+        text_pln = bgv.encode(text);
+ 
+        // calculate: (t * p - n) * a + r
+        std::vector<seal::Ciphertext> result_enc(2);
+        std::vector<std::string> hash(text.size(), "");
+
+        for (int32_t i = 0; i < 2; i++) {
+            auto a = rand.get_integer<int64_t>(1, prime / 2) * rand.get_integer<int64_t>({ -1, 1 });
+            auto r = rand.get_integer_vector<int64_t>(-prime / 2, prime / 2, text.size());
+
+            for (int32_t j = 0; j < r.size(); j++) {
+                hash[j] += sha256(std::to_string(r[j]));
+            }
+
+            result_enc[i] = bgv.multiply(pattern_enc, text_pln);
+
+            auto temp = bgv.decode(bgv.decrypt(result_enc[i]));
+            result_enc[i] = bgv.sub(result_enc[i], bgv.encode(std::vector<int64_t>(text.size(), static_cast <int64_t>(pattern.size()) * powers[unique_int_cnt])));
+            result_enc[i] = bgv.multiply(result_enc[i], bgv.encode(std::vector<int64_t>(1, a)));
+            result_enc[i] = bgv.add(result_enc[i], bgv.encode(r));
+        }
+
+        return std::make_pair(result_enc, hash);
+    };
+
+
+    // create Alice function
+    auto alice = [&]() {
+        seal::Ciphertext pattern_enc;
+
+        for (auto& e : pattern) {
+            e = powers[unique_int_cnt - int2power_map[e]];
+        }
+
+        pattern_enc = bgv.encrypt(bgv.encode(pattern));
+
+        // send to bob
+        auto [result_enc, hash] = bob(pattern_enc);
+
+        // analyzing result
+        matched.clear();
+        std::vector<std::vector<int64_t>> result(2);
+
+        for (int32_t i = 0; i < 2; i++) {
+            result[i] = bgv.decode(bgv.decrypt(result_enc[i]));
+        }
+
+        for (int32_t i = static_cast<int32_t>(pattern.size()) - 1; i < text.size(); i++) {
+            std::string hashing_result = "";
+
+            for (int32_t j = 0; j < 2; j++) {
+                hashing_result += sha256(std::to_string(result[j][i]));
+            }
+
+            if (hashing_result == hash[i]) {
+                matched.push_back(static_cast<int32_t>(text.size()) - i - 1);
             }
         }
     };

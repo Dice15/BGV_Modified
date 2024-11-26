@@ -1,7 +1,4 @@
-﻿// Copyright (c) Microsoft Corporation. All rights reserved.
-// Licensed under the MIT license.
-
-#include "examples.h"
+﻿#include "examples.h"
 #include "modules/bgv/BGVBuilder.h"
 #include "modules/bgv/BGVSeal.h"
 #include "modules/random/RandomGenerator.h"
@@ -81,7 +78,7 @@ void binary_matching(const int32_t text_size = 2048, const int32_t pattern_size 
     }
 }
 
-void integer_matching(const int32_t text_size = 2048, const int32_t pattern_size = 10, const int32_t unique_int_cnt=4) {
+void integer_matching(const int32_t text_size = 2048, const int32_t pattern_size = 10, const int32_t unique_int_cnt = 4) {
     cout << endl << "------------------ <Testing integer matching: text size(" << text_size << "), pattern size(" << pattern_size << ")> ------------------" << endl << endl;
 
 
@@ -109,7 +106,7 @@ void integer_matching(const int32_t text_size = 2048, const int32_t pattern_size
     cout << "Pattern:";
     print_vector(pattern, std::min(10, static_cast<int32_t>(pattern.size())));
 
-    
+
     //Testing
     MatchingSimulator simulator;
 
@@ -129,6 +126,19 @@ void integer_matching(const int32_t text_size = 2048, const int32_t pattern_size
     {
         cout << "- hash + rotation" << endl;
         auto [time, matched] = simulator.integer_matching(text, pattern, integer_matching_type::hash_rotation);
+        if (matched.empty()) {
+            cout << endl << "    [ empty ]" << endl << endl;
+        }
+        else {
+            sort(matched.begin(), matched.end());
+            print_vector(matched, matched.size());
+        }
+        cout << "    Execution time: " << time << "ms" << endl << endl;
+    }
+
+    {
+        cout << "- hash + power" << endl;
+        auto [time, matched] = simulator.integer_matching(text, pattern, integer_matching_type::hash_power);
         if (matched.empty()) {
             cout << endl << "    [ empty ]" << endl << endl;
         }
@@ -169,7 +179,7 @@ std::vector<uint64_t> calculate_mod_frequencies_from_balanced_sets(int sub_set_s
 }
 
 std::vector<uint64_t> calculate_mod_frequencies_from_unbalanced_sets(int sub_set_size, int full_set_size, int start_index) {
-    std::vector<int> set1(sub_set_size);
+    /*std::vector<int> set1(sub_set_size);
     for (int i = 0; i < sub_set_size; ++i) {
         set1[i] = (start_index + i) % full_set_size;
     }
@@ -188,6 +198,16 @@ std::vector<uint64_t> calculate_mod_frequencies_from_unbalanced_sets(int sub_set
         }
     }
 
+    return mod_results;*/
+
+    RandomGenerator rand;
+    auto temp = rand.get_integer_vector<int64_t>(0, full_set_size - 1, full_set_size, rand.get_random_weights(full_set_size));
+    std::vector<uint64_t> mod_results(full_set_size, 0);
+    for (int i = 0; i < full_set_size; i++) {
+        mod_results[i] = temp[i];
+        //cout << temp[i] << ' ';
+    }
+    //cout << '\n';
     return mod_results;
 }
 
@@ -329,45 +349,35 @@ void probabiity_of_root_of_unity(uint64_t unique_int_cnt, uint64_t factor, uint6
 
     // create subset
     std::vector<uint64_t> original_set_frequencies(n, 1);
-    std::vector<uint64_t> balanced_sub_set_frequencies;
-    std::vector<uint64_t> unbalanced_sub_set_frequencies;
+    std::vector<uint64_t> unbalanced_sub_set_frequencies(n, 0);
 
-    if (n != unique_int_cnt) {
-        balanced_sub_set_frequencies = calculate_mod_frequencies_from_balanced_sets(unique_int_cnt, n);
-        unbalanced_sub_set_frequencies = calculate_mod_frequencies_from_unbalanced_sets(unique_int_cnt, n, 0);
-    }
+    unbalanced_sub_set_frequencies[0] = 75;
+    unbalanced_sub_set_frequencies[1] = 15;
+    unbalanced_sub_set_frequencies[2] = 5;
+    unbalanced_sub_set_frequencies[3] = 5;
 
 
     // calculate mixing time
     double_t original_set_mixing_time = 0.0;
-    double_t balanced_subset_mixing_time = 0.0;
     double_t unbalanced_subset_mixing_time = 0.0;
 
-    if (n != unique_int_cnt) {
-        auto future_original_set_mixing_time = std::async(std::launch::async, compute_mixing_time, powers, original_set_frequencies, prime, 0.01);
-        auto future_balanced_subset_mixing_time = std::async(std::launch::async, compute_mixing_time, powers, balanced_sub_set_frequencies, prime, 0.01);
-        auto future_unbalanced_subset_mixing_time = std::async(std::launch::async, compute_mixing_time, powers, unbalanced_sub_set_frequencies, prime, 0.01);
+    auto future_original_set_mixing_time = std::async(std::launch::async, compute_mixing_time, powers, original_set_frequencies, prime, 0.01);
+    auto future_unbalanced_subset_mixing_time = std::async(std::launch::async, compute_mixing_time, powers, unbalanced_sub_set_frequencies, prime, 0.01);
 
-        original_set_mixing_time = future_original_set_mixing_time.get();
-        balanced_subset_mixing_time = future_balanced_subset_mixing_time.get();
-        unbalanced_subset_mixing_time = future_unbalanced_subset_mixing_time.get();
-    }
-    else {
-        original_set_mixing_time = compute_mixing_time(powers, original_set_frequencies, prime);
-    }
+    original_set_mixing_time = future_original_set_mixing_time.get();
+    unbalanced_subset_mixing_time = future_unbalanced_subset_mixing_time.get();
 
-    uint64_t max_mixing_time = min(static_cast<uint64_t>(1000), static_cast<uint64_t>(ceil(max(original_set_mixing_time, max(balanced_subset_mixing_time, unbalanced_subset_mixing_time)))));
+
+    uint64_t max_mixing_time = min(static_cast<uint64_t>(150), static_cast<uint64_t>(ceil(max(original_set_mixing_time, unbalanced_subset_mixing_time))));
 
     cout << std::fixed << std::setprecision(std::numeric_limits<double_t>::max_digits10);
     cout << "\n    For unique_int_cnt = " << unique_int_cnt << ", n = " << n << ", p = " << prime << ": " << '\n';
     cout << "      Original Set Mixing Time      = " << original_set_mixing_time << '\n';
-    cout << "      Balanced Subset Mixing Time   = " << balanced_subset_mixing_time << '\n';
     cout << "      Unbalanced Subset Mixing Time = " << unbalanced_subset_mixing_time << '\n';
 
 
     // calculate prob
     std::unordered_map<uint64_t, double_t> original_set_wrong_prob;
-    std::unordered_map<uint64_t, double_t> balanced_subset_wrong_prob;
     std::unordered_map<uint64_t, double_t> unbalanced_subset_wrong_prob;
 
     if (calc_wrong_prob) {
@@ -379,18 +389,11 @@ void probabiity_of_root_of_unity(uint64_t unique_int_cnt, uint64_t factor, uint6
 
         cout << "\n    For m = " << max_mixing_time << ", unique_int_cnt = " << unique_int_cnt << ", n = " << n << ", p = " << prime << ": " << '\n';
 
-        if (n != unique_int_cnt) {
-            auto future_original_set = std::async(std::launch::async, count_ordered_permutations_mod_prob, powers, original_set_frequencies, 1, max_mixing_time, prime, target_mods);
-            auto future_balanced_subset = std::async(std::launch::async, count_ordered_permutations_mod_prob, powers, balanced_sub_set_frequencies, 1, max_mixing_time, prime, target_mods);
-            auto future_unbalanced_subset = std::async(std::launch::async, count_ordered_permutations_mod_prob, powers, unbalanced_sub_set_frequencies, 1, max_mixing_time, prime, target_mods);
+        auto future_original_set = std::async(std::launch::async, count_ordered_permutations_mod_prob, powers, original_set_frequencies, 1, max_mixing_time, prime, target_mods);
+        auto future_unbalanced_subset = std::async(std::launch::async, count_ordered_permutations_mod_prob, powers, unbalanced_sub_set_frequencies, 1, max_mixing_time, prime, target_mods);
 
-            original_set_wrong_prob = future_original_set.get();
-            balanced_subset_wrong_prob = future_balanced_subset.get();
-            unbalanced_subset_wrong_prob = future_unbalanced_subset.get();
-        }
-        else {
-            original_set_wrong_prob = count_ordered_permutations_mod_prob(powers, original_set_frequencies, 1, max_mixing_time, prime, target_mods);
-        }
+        original_set_wrong_prob = future_original_set.get();
+        unbalanced_subset_wrong_prob = future_unbalanced_subset.get();
     }
 
 
@@ -410,9 +413,6 @@ void probabiity_of_root_of_unity(uint64_t unique_int_cnt, uint64_t factor, uint6
     out << "      Original Set Frequencies      = [";
     for (auto& e : original_set_frequencies) out << e << ", "; out << "]\n";
 
-    out << "      Balanced Subset Frequencies   = [";
-    for (auto& e : balanced_sub_set_frequencies) out << e << ", "; out << "]\n";
-
     out << "      Unbalanced Subset Frequencies = [";
     for (auto& e : unbalanced_sub_set_frequencies) out << e << ", "; out << "]\n";
 
@@ -420,17 +420,14 @@ void probabiity_of_root_of_unity(uint64_t unique_int_cnt, uint64_t factor, uint6
     out << std::fixed << std::setprecision(std::numeric_limits<double_t>::max_digits10);
     out << "    For unique_int_cnt = " << unique_int_cnt << ", n = " << n << ", p = " << prime << ": " << '\n';
     out << "      Original Set Mixing Time      = " << original_set_mixing_time << '\n';
-    out << "      Balanced Subset Mixing Time   = " << balanced_subset_mixing_time << '\n';
     out << "      Unbalanced Subset Mixing Time = " << unbalanced_subset_mixing_time << '\n';
 
     if (calc_wrong_prob) {
         for (uint64_t m = 1; m <= max_mixing_time; m++) {
             auto prob_original_set = original_set_wrong_prob[m] * 100.0;
-            auto prob_balanced_subset = balanced_subset_wrong_prob[m] * 100.0;
             auto prob_unbalanced_subset = unbalanced_subset_wrong_prob[m] * 100.0;
 
             auto both_prob_original_set = prob_original_set * prob_original_set / 100.0;
-            auto both_prob_balanced_subset = prob_balanced_subset * prob_balanced_subset / 100.0;
             auto both_prob_unbalanced_subset = prob_unbalanced_subset * prob_unbalanced_subset / 100.0;
 
             auto prob_theoretical_single_set = static_cast<double_t>(1) / (static_cast<double_t>(prime) / 100.0);
@@ -439,116 +436,254 @@ void probabiity_of_root_of_unity(uint64_t unique_int_cnt, uint64_t factor, uint6
             out << "    For m = " << m << ", unique_int_cnt = " << unique_int_cnt << ", n = " << n << ", p = " << prime << ": " << '\n';
             out << "      Convergence Single Probability     = " << prob_theoretical_single_set << '\n';
             out << "      Original Set Probability           = " << prob_original_set << '\n';
-            out << "      Balanced Subset Probability        = " << prob_balanced_subset << '\n';
             out << "      Unbalanced Subset Probability      = " << prob_unbalanced_subset << '\n';
 
             out << "      Convergence Both Probability       = " << prob_theoretical_both_set << '\n';
             out << "      Both Original Set Probability      = " << both_prob_original_set << '\n';
-            out << "      Both Balanced Subset Probability   = " << both_prob_balanced_subset << '\n';
             out << "      Both Unbalanced Subset Probability = " << both_prob_unbalanced_subset << '\n';
         }
     }
 }
 
+vector<complex<double>> calculate_powers_of_root(size_t n) {
+    const double PI = 3.1415926535897932384626433832795028842;
+    if (n == 0) {
+        throw invalid_argument("n must be greater than 0");
+    }
+
+    vector<complex<double>> powers(n + 1);
+
+    for (size_t k = 0; k <= n; ++k) {
+        double angle = 2.0 * PI * k / static_cast<double>(n);
+        powers[k] = polar(1.0, angle);
+    }
+
+    return powers;
+}
+
+
 void main()
 {
-    // random module
     RandomGenerator rand;
 
-    // set modulus degree
-    int64_t modulus_degree = 16384;
+    size_t poly_modulus_degree = 1 << 15;
+    EncryptionParameters parms(scheme_type::ckks);
+    parms.set_poly_modulus_degree(poly_modulus_degree);
+    parms.set_coeff_modulus(CoeffModulus::Create(poly_modulus_degree, { 60, 55, 55, 55, 60 }));
+    double scale = pow(2.0, 55);  // 10^16.5 < 2^55 = 36,028,797,018,963,968 < 10^16.6 (0.00000000000001미만의 오차 발생 -> 14자리 까지 정확히 예측 가능)
 
-    // create bfv
-    SEALHelper& bfv = SEALBuilder(seal::scheme_type::bfv, seal::sec_level_type::tc128, modulus_degree, { 40, 30, 30, 30, 30, 30, 30, 30, 30, 30, 40 }, 31, true)
-        .create_secret_key()
-        .create_public_key()
-        .create_galois_keys({ 1, 2, 4, 8, 16 })
-        .create_relin_keys()
-        .build();
+    SEALContext context(parms);
 
-    // get plain modulus prime
-    int64_t prime = bfv.plain_modulus_prime();
+    KeyGenerator keygen(context);
+    SecretKey secret_key = keygen.secret_key();
+    PublicKey public_key;
+    keygen.create_public_key(public_key);
+    RelinKeys relin_keys;
+    keygen.create_relin_keys(relin_keys);
+    Encryptor encryptor(context, public_key);
+    Evaluator evaluator(context);
+    Decryptor decryptor(context, secret_key);
+    CKKSEncoder encoder(context, false);
+    size_t slot_count = encoder.slot_count();
+    size_t logn = util::get_power_of_two(parms.poly_modulus_degree());
 
-    // input data
-    std::vector<int64_t> users = { 1, 2, 3, 4, 6, 7, 8, 9, 10, 11 };
-    std::vector<int64_t> sns_users = { 3, 4, 5, 6, 8, 9, 10, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24 };
-    std::vector<int64_t> adjusted_users(modulus_degree, 1);
-    std::vector<int64_t> adjusted_sns_users(modulus_degree, 0);
-    int64_t adjusted_vector_size = pow(2, ceil(log2(sns_users.size())));
+    cout << "Number of slots: " << slot_count << endl;
+    cout << "Modulus Bit: " << logn << endl;
+    print_parameters(context);
+    cout << endl;
 
-    for (int64_t i = 0; i < users.size(); i++) {
-        for (int64_t j = 0; j < sns_users.size(); j++) {
-            adjusted_users[i * adjusted_vector_size + j] = users[i];
-            adjusted_sns_users[i * adjusted_vector_size + j] = sns_users[j];
+    cout << fixed << setprecision(30);
+    const int width = 33;
+
+    vector<double> text[2];
+    vector<double> pattern[2];
+    vector<double> m[2];
+    vector<double> s[2];
+    vector<double> rn[2];
+
+
+    // init example data
+    int unique_char_num = 8;
+    int text_size = 16;
+    int pattern_size = 3;
+    auto powers = calculate_powers_of_root(unique_char_num);
+
+    text[0].reserve(text_size);   // real(w^0 ~ w^7)
+    text[1].reserve(text_size);   // imag(w^0 ~ w^7)
+    for (int i = 0; i < text_size; i++) {
+        text[0].push_back(powers[i % unique_char_num].real());
+        text[1].push_back(powers[i % unique_char_num].imag());
+        //text[0].push_back(1);
+        //text[1].push_back(1);
+    }
+
+    pattern[0].reserve(pattern_size);   // real(w^4 ~ w^6)
+    pattern[1].reserve(pattern_size);   // imag(w^4 ~ w^6)
+    double expected_m1 = 0.0;
+    double expected_m2 = 0.0;
+    for (int i = 0, j = 4; i < pattern_size; i++, j++) {
+        pattern[0].push_back(powers[j].real());
+        pattern[1].push_back(powers[j].imag());
+        //pattern[0].push_back(1);
+        //pattern[1].push_back(1);
+        expected_m1 += powers[j].real() * powers[unique_char_num - j].real();
+        expected_m2 += powers[j].imag() * powers[unique_char_num - j].imag();
+    }
+
+
+
+    m[0].assign(text_size, expected_m1);   // real(w^4 ~ w^6)
+    m[1].assign(text_size, expected_m2);   // imag(w^4 ~ w^6)
+
+    for (int i = 0; i < 2; i++) {
+        // 소수점 14자리까지만 유효하므로, 46비트 사용. 1미만인 값으로 만들어야 소수점 14자리까지 값을 오차 없이 지킬 수 있음.
+        s[i].assign(1, static_cast<double>(rand.get_integer<int64_t>(1, pow(2, 46) - 1)) / 100000000000000.0);
+    }
+
+    rn[0].reserve(text_size);
+    rn[1].reserve(text_size);
+    while (rn[0].size() < text_size) {
+        rn[0].push_back(static_cast<double>(rand.get_integer<int64_t>(1, pow(2, 46) - 1)) / 100000000000000.0);
+        rn[1].push_back(static_cast<double>(rand.get_integer<int64_t>(1, pow(2, 46) - 1)) / 100000000000000.0);
+    }
+
+    print_vector(text[0], 8);
+    print_vector(text[1], 8);
+    print_vector(pattern[0], 8);
+    print_vector(pattern[1], 8);
+    cout << expected_m1 << '\n';
+    cout << expected_m2 << '\n';
+    print_vector(s[0], 8);
+    print_vector(s[1], 8);
+    print_vector(rn[0], 8);
+    print_vector(rn[1], 8);
+
+
+    // pattern encrypt
+    Plaintext pattern_plain[2];
+    Ciphertext pattern_cipher[2];
+
+    for (int i = 0; i < 2; i++) {
+        encoder.encode(pattern[i], scale, pattern_plain[i]);
+        encryptor.encrypt(pattern_plain[i], pattern_cipher[i]);
+    }
+
+
+    // calc
+    Plaintext text_plain;
+    Plaintext m_plain;
+    Plaintext s_plain;
+    Plaintext rn_plain;
+    Ciphertext res_cipher[2];
+
+    for (int i = 0; i < 2; i++) {
+        encoder.encode(text[i], pattern_cipher[i].scale(), text_plain);
+        evaluator.multiply_plain(pattern_cipher[i], text_plain, res_cipher[i]);
+        evaluator.relinearize_inplace(res_cipher[i], relin_keys);
+        evaluator.rescale_to_next_inplace(res_cipher[i]);
+
+        encoder.encode(m[i], res_cipher[i].scale(), m_plain);
+        evaluator.mod_switch_to_inplace(m_plain, res_cipher[i].parms_id());
+        evaluator.sub_plain(res_cipher[i], m_plain, res_cipher[i]);
+
+        encoder.encode(s[i], res_cipher[i].scale(), s_plain);
+        evaluator.mod_switch_to_inplace(s_plain, res_cipher[i].parms_id());
+        evaluator.multiply_plain(res_cipher[i], s_plain, res_cipher[i]);
+        evaluator.relinearize_inplace(res_cipher[i], relin_keys);
+        evaluator.rescale_to_next_inplace(res_cipher[i]);
+
+        encoder.encode(rn[i], res_cipher[i].scale(), rn_plain);
+        evaluator.mod_switch_to_inplace(rn_plain, res_cipher[i].parms_id());
+        evaluator.add_plain(res_cipher[i], rn_plain, res_cipher[i]);
+    }
+
+
+    // decrypt
+    Plaintext res_plain[2];
+    for (int i = 0; i < 2; i++) {
+        decryptor.decrypt(res_cipher[i], res_plain[i]);
+    }
+
+
+    // decode
+    vector<double> res[2];
+    for (int i = 0; i < 2; i++) {
+        encoder.decode(res_plain[i], res[i]);
+
+        cout << (i == 0 ? "Real part matching" : "Imag part matching") << '\n';
+        for (int j = 0; j < text_size; j++) {
+            double diff = abs(res[i][j] - rn[i][j]);
+
+            cout << "(" << right << setw(width) << res[i][j]
+                << ") - (" << right << setw(width) << rn[i][j]
+                << ") = (" << right << setw(width) << diff
+                << ") : " << right << (static_cast<int64_t>(floor(diff * pow(10, 14))) == 0LL ? "matched" : "not-matched")
+                << '\n';
         }
     }
-
-    // calculate
-    auto range_multiply = [&bfv](const seal::Ciphertext& ciphertext, const int range_size) {
-        seal::Ciphertext result = ciphertext;
-        seal::Ciphertext rotated;
-        int rotation_count = ceil(log2(range_size));
-
-        for (int i = 0, step = 1; i < rotation_count; i++, step <<= 1) {
-            rotated = bfv.rotate(result, step);
-            result = bfv.multiply(result, rotated);
-        }
-
-        return result;
-    };
-
-    Ciphertext user_enc = bfv.encrypt(bfv.encode(adjusted_users));
-    Plaintext sns_users_pln = bfv.encode(adjusted_sns_users);
-
-    Ciphertext result_enc = bfv.sub(user_enc, sns_users_pln);
-    result_enc = range_multiply(result_enc, sns_users.size());
-
-    std::vector<int64_t> r = rand.get_integer_vector<int64_t>(1, prime / 2, modulus_degree);
-    for (auto& e : r) {
-       e *= rand.get_integer<int64_t>({ -1, 1 });
-    }
-    result_enc = bfv.multiply(result_enc, bfv.encode(r));
-
-    // decrypt result and print
-    std::vector<int64_t> result = bfv.decode(bfv.decrypt(result_enc));
-    for (int64_t i = 0; i < users.size(); i++) {
-        std::cout << i << ") user id: " << users[i] << ", result: " << result[i * adjusted_vector_size] << '\n';
-    }
-    
-
-
-    //pow(26, 3), pow(10, 4), pow(10, 5), pow(4, 6), pow(4, 7), pow(4, 8)
-    /*for (auto& u : {pow(26, 2), pow(26, 1), pow(10, 3), pow(10, 2), pow(10, 1), pow(4, 5), pow(4, 4), pow(4, 3), pow(4, 2), pow(4, 1)}) {
-        for (auto& b : { 29 }) {
-            std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
-            probabiity_of_root_of_unity(u, pow(2, 17), b, false);
-            std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
-            std::chrono::duration<double, std::milli> elapsed = end - start;
-            cout << "    Execution time: " << elapsed.count() << "ms" << endl << endl;
-        }
-    }*/
-
-    /*for (auto& [text_size, pattern_size, unique_int_cnt] : vector<tuple<int32_t, int32_t, int32_t>>{
-        {3000, 05, 26},
-        {3000, 15, 26},
-        {3000, 25, 26},
-        {3000, 35, 26},
-        {3000, 45, 26},
-        {3000, 55, 26}
-        })
-    {
-        integer_matching(3000, pattern_size, unique_int_cnt);
-    }
-
-    for (auto& [text_size, pattern_size] : vector<tuple<int32_t, int32_t>>{
-        {3000, 05 },
-        {3000, 15 },
-        {3000, 25 },
-        {3000, 35 },
-        {3000, 45 },
-        {3000, 55 }
-        })
-    {
-        //binary_matching(3000, pattern_size);
-    }*/
 }
+
+
+/*
+    0.000000000000001 << 15자리 부터 오차 존재.
+    0.000000000000000666133814775094
+    0.000000000000001776356839400250
+    0.000000000000005329070518200751
+    0.000000000000000333066907387547
+    0.000000000000001998401444325282
+    0.000000000000000444089209850063
+    0.000000000000000444089209850063
+    0.000000000000000888178419700125
+    0.000000000000000971445146547012
+    0.000000000000001332267629550188
+    0.000000000000000444089209850063
+    0.000000000000002664535259100376
+    0.000000000000002803313137178520
+    0.000000000000002664535259100376
+    0.000000000000000333066907387547
+
+CKKSEncoder::CKKSEncoder -  57
+Number of slots: 16384
+Modulus Bit: 15
+
+| Encryption parameters :
+|   scheme: CKKS
+|   poly_modulus_degree: 32768
+|   coeff_modulus size: 285 (60 + 55 + 55 + 55 + 60) bits
+
+Real part matching
+(-1.010732579096475403090948930185) - ( 0.518943653269799964888875365432) = ( 1.529676232366275367979824295617) : not-matched
+(-1.580261070633564912668589386158) - ( 0.202860218327069991017808092693) = ( 1.783121288960634931441973094479) : not-matched
+(-0.917756923777534816544232398883) - ( 0.305984062115490007549567508249) = ( 1.223740985893024824093799907132) : not-matched
+(-0.307078809685701448195516150008) - ( 0.178069154963629988630557932083) = ( 0.485147964649331409070498466463) : not-matched
+( 0.248002843372918169162488766233) - ( 0.248002843372920001030479397741) = ( 0.000000000000001831867990631508) : matched
+( 0.230853239860283998563517116054) - ( 0.283343429739179974991003518880) = ( 0.052490189878895976427486402827) : not-matched
+(-0.292125822700155080013928454719) - ( 0.319744670246350004561008972814) = ( 0.611870492946505084574937427533) : not-matched
+(-1.033295560652304212467811339593) - ( 0.317167953537890012771782721757) = ( 1.350463514190194169728442830092) : not-matched
+(-1.787178076919191171967327136372) - ( 0.048433401920339999580100709409) = ( 1.835611478839531240936366884853) : not-matched
+(-1.284331506034902092849847576872) - ( 0.498789782925730007523412723458) = ( 1.783121288960632044862109069072) : not-matched
+(-0.956059334654741022063717537094) - ( 0.267681651238280027271798644506) = ( 1.223740985893021049335516181600) : not-matched
+(-0.066728024447734499147166786770) - ( 0.418419940201600004670012822316) = ( 0.485147964649334517694967416901) : not-matched
+( 0.155228538543252803094674163731) - ( 0.155228538543249999781536985211) = ( 0.000000000000002803313137178520) : matched
+( 0.348978125881034328958918422359) - ( 0.401468315759929972319497437638) = ( 0.052490189878895643360579015280) : not-matched
+( 0.075593227687373296119766052925) - ( 0.687463720633879948884725763492) = ( 0.611870492946506638887171902752) : not-matched
+(-1.205021662428036544056908496714) - ( 0.145441851762160012651037277465) = ( 1.350463514190196612219097005436) : not-matched
+
+Imag part matching
+( 0.699213740669131111893364050047) - ( 0.585340965968879967107341144583) = ( 0.113872774700251144786022905464) : not-matched
+( 0.239330229797072274733338304031) - ( 0.125457455096819991968715157782) = ( 0.113872774700252282764623146250) : not-matched
+( 0.454060291828649265077899599419) - ( 0.378145108695150000688300906404) = ( 0.075915183133499264389598693015) : not-matched
+( 0.068767062801826525642034937391) - ( 0.062254569679009996718832553597) = ( 0.006512493122816528923202383794) : not-matched
+( 0.475539898693177309763058246972) - ( 0.475539898693179974298317347348) = ( 0.000000000000002664535259100376) : matched
+( 0.656807387593679514736777491635) - ( 0.596614753682150000813066981209) = ( 0.060192633911529513923710510426) : not-matched
+( 0.560569548664498706891379242734) - ( 0.408739182397500011578728162931) = ( 0.151830366266998695312651079803) : not-matched
+( 0.922730034700965262572935898788) - ( 0.701496978423279959891090129531) = ( 0.221233056277685302681845769257) : not-matched
+( 0.869920245149257143069121411827) - ( 0.642174695748759960522988876619) = ( 0.227745549400497182546132535208) : not-matched
+( 0.763115819698722996911044447188) - ( 0.595562904209759991225325848063) = ( 0.167552915488963005685718599125) : not-matched
+( 0.238942696884599459217213279771) - ( 0.163027513751100000538585277354) = ( 0.075915183133499458678628002417) : not-matched
+( 0.211805688651547890932747009174) - ( 0.205293195528729988108551651749) = ( 0.006512493122817902824195357425) : not-matched
+( 0.565251080825450280542554537533) - ( 0.565251080825449947475647149986) = ( 0.000000000000000333066907387547) : matched
+( 0.641889417713795151776423608680) - ( 0.581696783802259975715287509956) = ( 0.060192633911535176061136098724) : not-matched
+( 0.383441279398457901539387648882) - ( 0.231610913131460011138429422317) = ( 0.151830366266997890400958226564) : not-matched
+( 0.225764980337783194297429645303) - ( 0.004531924060100000171968925855) = ( 0.221233056277683193258098981460) : not-matched
+*/

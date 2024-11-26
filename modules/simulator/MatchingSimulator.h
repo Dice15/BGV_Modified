@@ -10,6 +10,7 @@ enum class binary_matching_type : int8_t {
 enum class integer_matching_type : int8_t {
 	hash_primitive_root,
 	hash_rotation,
+	hash_power,
 };
 
 class MatchingSimulator {
@@ -32,4 +33,6 @@ private:
 	void integer_matching_hash_primitive_root(std::vector<int64_t> text, std::vector<int64_t> pattern, std::vector<int> &matched);
 
 	void integer_matching_hash_rotation(std::vector<int64_t> text, std::vector<int64_t> pattern, std::vector<int>& matched);
+
+	void integer_matching_hash_power(std::vector<int64_t> text, std::vector<int64_t> pattern, std::vector<int>& matched);
 };
