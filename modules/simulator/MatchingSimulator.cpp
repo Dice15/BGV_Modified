@@ -314,7 +314,7 @@ void MatchingSimulator::integer_matching_hash_primitive_root(std::vector<int64_t
     );
 
     int64_t n = static_cast<int64_t>(1) << static_cast<int64_t>(ceil(log2(unique_int_cnt)));
-    std::vector<uint64_t> roots = bgv.plain_modulus_roots(n, 2);
+    uint64_t roots = bgv.plain_modulus_primitive_root(n);
 
     std::vector<std::vector<int64_t>> powers(2);
     std::vector<std::unordered_map<int64_t, int>> int2power_map(2);
@@ -322,7 +322,7 @@ void MatchingSimulator::integer_matching_hash_primitive_root(std::vector<int64_t
 
     // mapping
     for (int32_t i = 0; i < 2; i++) {
-        uint64_t root = roots[i];
+        uint64_t root = roots;
         uint64_t power = 1;
         uint64_t h_prime = static_cast<uint64_t>(prime / 2);
 
