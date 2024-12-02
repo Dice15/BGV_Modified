@@ -3,320 +3,703 @@
 
 namespace she
 {
-     /**
-     * Initializes the Somewhat Homomorphic Encryption (SHE) object with provided SEAL components and keys.
-     *
-     * @param context The SEALContext, encapsulating encryption parameters and precomputations.
-     * @param encoder The BatchEncoder for encoding/decoding plaintexts into batch matrices.
-     * @param encryptor The Encryptor for encrypting plaintexts.
-     * @param decryptor The Decryptor for decrypting ciphertexts.
-     * @param evaluator The Evaluator for performing homomorphic operations.
-     * @param default_mul_mode The default multiplication mode (element-wise or convolution).
-     * @param secret_key The secret key for decryption and other operations.
-     * @param public_key The public key for encryption.
-     * @param relin_keys The relinearization keys for ciphertext multiplication.
-     * @param galois_keys The Galois keys for rotation and batching operations.
-     */
     SHE::SHE(
+        seal::scheme_type scheme,
         std::unique_ptr<seal::SEALContext> context,
-        std::unique_ptr<seal::BatchEncoder> encoder,
+        std::unique_ptr<seal::BatchEncoder> batch_encoder,
         std::unique_ptr<seal::Encryptor> encryptor,
         std::unique_ptr<seal::Decryptor> decryptor,
         std::unique_ptr<seal::Evaluator> evaluator,
-        mul_mode_t default_mul_mode,
+        mul_mode_t mul_mode,
         const seal::SecretKey& secret_key,
         const seal::PublicKey& public_key,
         const seal::RelinKeys& relin_keys,
         const seal::GaloisKeys& galois_keys
     )
-        : context_(std::move(context)),
-        encoder_(std::move(encoder)),
+        : scheme_(scheme),
+        context_(std::move(context)),
+        batch_encoder_(std::move(batch_encoder)),
+        ckks_encoder_(nullptr),
         encryptor_(std::move(encryptor)),
         decryptor_(std::move(decryptor)),
         evaluator_(std::move(evaluator)),
-        default_mul_mode_(default_mul_mode),
+        mul_mode_(mul_mode),
         secret_key_(secret_key),
         public_key_(public_key),
         relin_keys_(relin_keys),
         galois_keys_(galois_keys) {
     }
 
-    void SHE::plain_modulus_prime(uint64_t& destination) const {
+    SHE::SHE(
+        seal::scheme_type scheme,
+        std::unique_ptr<seal::SEALContext> context,
+        std::unique_ptr<seal::CKKSEncoder> ckks_encoder,
+        double_t scale,
+        std::unique_ptr<seal::Encryptor> encryptor,
+        std::unique_ptr<seal::Decryptor> decryptor,
+        std::unique_ptr<seal::Evaluator> evaluator,
+        mul_mode_t mul_mode,
+        const seal::SecretKey& secret_key,
+        const seal::PublicKey& public_key,
+        const seal::RelinKeys& relin_keys,
+        const seal::GaloisKeys& galois_keys
+    )
+        : scheme_(scheme), 
+        context_(std::move(context)),
+        batch_encoder_(nullptr),
+        ckks_encoder_(std::move(ckks_encoder)),
+        scale_(scale),
+        encryptor_(std::move(encryptor)),
+        decryptor_(std::move(decryptor)),
+        evaluator_(std::move(evaluator)),
+        mul_mode_(mul_mode),
+        secret_key_(secret_key),
+        public_key_(public_key),
+        relin_keys_(relin_keys),
+        galois_keys_(galois_keys) {
+    }
+
+    void SHE::scheme(std::string& destination) const 
+    {
+        switch (scheme_)
+        {
+        case seal::scheme_type::bfv:
+            destination = "bfv";
+            break;
+        case seal::scheme_type::ckks:
+            destination = "ckks";
+            break;
+        case seal::scheme_type::bgv:
+            destination = "bgv";
+            break;
+        default:
+            throw std::invalid_argument("The specified scheme is not defined.");
+            break;
+        }
+    }
+
+    std::string SHE::scheme() const
+    {
+        std::string destination;
+        scheme(destination);
+        return destination;
+    }
+
+    void SHE::slot_count(size_t& destination) const
+    {
+        if (scheme_ == seal::scheme_type::bgv || scheme_ == seal::scheme_type::bfv)
+        {
+            destination = batch_encoder_->slot_count();
+        }
+        else if (scheme_ == seal::scheme_type::ckks)
+        {
+            destination = ckks_encoder_->slot_count();
+        }
+    }
+
+    size_t SHE::slot_count() const
+    {
+        size_t destination = -1;
+        slot_count(destination);
+        return destination;
+    }
+
+    void SHE::plain_modulus_prime(uint64_t& destination) const
+    {
+        // Verify scheme.
+        if (!(scheme_ == seal::scheme_type::bgv || scheme_ == seal::scheme_type::bfv))
+        {
+            throw std::invalid_argument("This function is only supported for BGV and BFV schemes.");
+        }
+
         destination = context_->key_context_data()->parms().plain_modulus().value();
     }
 
-    uint64_t SHE::plain_modulus_prime() const {
+    uint64_t SHE::plain_modulus_prime() const
+    {
         uint64_t destination = -1;
         plain_modulus_prime(destination);
         return destination;
     }
 
-    void SHE::plain_modulus_primitive_root(const uint64_t n, uint64_t& destination) const {
+    void SHE::plain_modulus_primitive_root(const uint64_t n, uint64_t& destination) const 
+    {
+        // Verify scheme.
+        if (!(scheme_ == seal::scheme_type::bgv || scheme_ == seal::scheme_type::bfv)) 
+        {
+            throw std::invalid_argument("This function is only supported for BGV and BFV schemes.");
+        }
+
+        // Validate if `n` is a power of two.
         if (!(n < 1 || (n & (n - 1)) != 0)) {
             seal::Modulus modulus = context_->key_context_data()->parms().plain_modulus();
             seal::util::try_primitive_root(n, modulus, destination);
         }
     }
 
-    uint64_t SHE::plain_modulus_primitive_root(const uint64_t n) const {
+    uint64_t SHE::plain_modulus_primitive_root(const uint64_t n) const
+    {
         uint64_t destination = -1;
         plain_modulus_primitive_root(n, destination);
         return destination;
     }
 
-    void SHE::encode(const std::vector<int64_t>& vector, seal::Plaintext& destination, const mul_mode_t mul_mode) const {
-        encoder_->encode(vector, destination, static_cast<seal::mul_mode_type>(mul_mode));
+    void SHE::scale(double_t& destination) const 
+    {
+        // Verify scheme.
+        if (!(scheme_ == seal::scheme_type::ckks)) 
+        {
+            throw std::invalid_argument("This function is only supported for CKKS schemes.");
+        }
+
+        destination = scale_;
     }
 
-    void SHE::encode(const std::vector<int64_t>& vector, seal::Plaintext& destination) const {
-        encode(vector, destination, default_mul_mode_);
-    }
-
-    seal::Plaintext SHE::encode(const std::vector<int64_t>& vector, const mul_mode_t mul_mode) const {
-        seal::Plaintext destination;
-        encode(vector, destination, mul_mode);
+    double_t SHE::scale() const 
+    {
+        double_t destination = -1;
+        scale(destination);
         return destination;
     }
 
-    seal::Plaintext SHE::encode(const std::vector<int64_t>& vector) const {
-        seal::Plaintext destination;
-        encode(vector, destination);
-        return destination;
+    mul_mode_t& SHE::mul_mode()
+    {
+        return mul_mode_;
     }
 
-    void SHE::decode(const seal::Plaintext& plaintext, std::vector<int64_t>& destination, const mul_mode_t mul_mode) const {
-        encoder_->decode(plaintext, destination, static_cast<seal::mul_mode_type>(mul_mode));
-    }
-
-    void SHE::decode(const seal::Plaintext& plaintext, std::vector<int64_t>& destination) const {
-        decode(plaintext, destination, default_mul_mode_);
-    }
-
-    std::vector<int64_t> SHE::decode(const seal::Plaintext& plaintext, const mul_mode_t mul_mode) const {
-        std::vector<int64_t> destination;
-        decode(plaintext, destination, mul_mode);
-        return destination;
-    }
-
-    std::vector<int64_t> SHE::decode(const seal::Plaintext& plaintext) const {
-        std::vector<int64_t> destination;
-        decode(plaintext, destination);
-        return destination;
-    }
-
-    void SHE::encrypt(const seal::Plaintext& plaintext, seal::Ciphertext& destination) const {
+    void SHE::encrypt(const seal::Plaintext& plaintext, seal::Ciphertext& destination) const 
+    {
         encryptor_->encrypt(plaintext, destination);
     }
 
-    seal::Ciphertext SHE::encrypt(const seal::Plaintext& plaintext) const {
+    seal::Ciphertext SHE::encrypt(const seal::Plaintext& plaintext) const
+    {
         seal::Ciphertext destination;
         encrypt(plaintext, destination);
         return destination;
     }
 
-    void SHE::decrypt(const seal::Ciphertext& ciphertext, seal::Plaintext& destination) const {
+    void SHE::decrypt(const seal::Ciphertext& ciphertext, seal::Plaintext& destination) const
+    {
         decryptor_->decrypt(ciphertext, destination);
     }
 
-    seal::Plaintext SHE::decrypt(const seal::Ciphertext& ciphertext) const {
+    seal::Plaintext SHE::decrypt(const seal::Ciphertext& ciphertext) const
+    {
         seal::Plaintext destination;
         decrypt(ciphertext, destination);
         return destination;
     }
 
-    bool SHE::mod_compare(const seal::Ciphertext& ciphertext1, const seal::Ciphertext& ciphertext2) const {
+    bool SHE::mod_compare(const seal::Ciphertext& ciphertext1, const seal::Ciphertext& ciphertext2) const
+    {
+        // Verify scheme.
+        if (!(scheme_ == seal::scheme_type::bgv || scheme_ == seal::scheme_type::bfv))
+        {
+            throw std::invalid_argument("This function is only supported for BGV and BFV schemes.");
+        }
+
+        // Compare the coefficient modulus sizes of the ciphertexts.
         return ciphertext1.coeff_modulus_size() == ciphertext2.coeff_modulus_size();
     }
 
-    void SHE::mod_matching(const seal::Ciphertext& ciphertext1, const seal::Ciphertext& ciphertext2, seal::Ciphertext& destination1, seal::Ciphertext& destination2) const {
+    void SHE::mod_matching(const seal::Ciphertext& ciphertext1, const seal::Ciphertext& ciphertext2, seal::Ciphertext& destination1, seal::Ciphertext& destination2) const
+    {
+        // Verify scheme.
+        if (!(scheme_ == seal::scheme_type::bgv || scheme_ == seal::scheme_type::bfv))
+        {
+            throw std::invalid_argument("This function is only supported for BGV and BFV schemes.");
+        }
+
+        if (ciphertext1.coeff_modulus_size() == ciphertext2.coeff_modulus_size())
+        {
+            throw std::invalid_argument("The modulus sizes of both ciphertexts are already equal");
+        }
+
         destination1 = ciphertext1;
         destination2 = ciphertext2;
 
-        if (destination1.coeff_modulus_size() > destination2.coeff_modulus_size()) {
+        if (destination1.coeff_modulus_size() > destination2.coeff_modulus_size()) 
+        {
             std::swap(destination1, destination2);
         }
 
-        while (destination1.coeff_modulus_size() < destination2.coeff_modulus_size()) {
+        while (destination1.coeff_modulus_size() != destination2.coeff_modulus_size())
+        {
             evaluator_->mod_switch_to_next_inplace(destination2);
         }
     }
 
-    void SHE::add(const seal::Ciphertext& ciphertext1, const seal::Ciphertext& ciphertext2, seal::Ciphertext& destination) const {
-
-        auto add_cipher = [this](const seal::Ciphertext& cipher1, const seal::Ciphertext& cipher2, seal::Ciphertext& dest) {
-            evaluator_->add(cipher1, cipher2, dest);
-        };
-
-        if (mod_compare(ciphertext1, ciphertext2)) {
-            add_cipher(ciphertext1, ciphertext2, destination);
+    bool SHE::mod_scale_compare(const seal::Ciphertext& ciphertext1, const seal::Ciphertext& ciphertext2) const
+    {
+        // Verify scheme.
+        if (!(scheme_ == seal::scheme_type::ckks))
+        {
+            throw std::invalid_argument("This function is only supported for CKKS schemes.");
         }
-        else {
-            seal::Ciphertext cipher1;
-            seal::Ciphertext cipher2;
 
-            mod_matching(ciphertext1, ciphertext2, cipher1, cipher2);
-            add_cipher(cipher1, cipher2, destination);
+        // Compare modulus sizes and scales.
+        return ciphertext1.coeff_modulus_size() == ciphertext2.coeff_modulus_size() && ciphertext1.scale() == ciphertext2.scale();
+    }
+
+    bool SHE::mod_scale_compare(const seal::Ciphertext& ciphertext, const seal::Plaintext& plaintext) const
+    {
+        // Verify scheme.
+        if (!(scheme_ == seal::scheme_type::ckks))
+        {
+            throw std::invalid_argument("This function is only supported for CKKS schemes.");
+        }
+
+        // Compare modulus size and scale.
+        return ciphertext.parms_id() == plaintext.parms_id() && ciphertext.scale() == plaintext.scale();
+    }
+
+    void SHE::mod_scale_matching(const seal::Ciphertext& ciphertext1, const seal::Ciphertext& ciphertext2, seal::Ciphertext& destination1, seal::Ciphertext& destination2) const
+    {
+        // Verify scheme.
+        if (!(scheme_ == seal::scheme_type::ckks))
+        {
+            throw std::invalid_argument("This function is only supported for CKKS schemes.");
+        }
+
+        if (ciphertext1.scale() == ciphertext2.scale() && ciphertext1.coeff_modulus_size() == ciphertext2.coeff_modulus_size())
+        {
+            throw std::invalid_argument("이미 두 암호문의 모듈러스 사이즈와 스케일이 같습니다.");
+        }
+
+        // In the CKKS scheme, if encoded with the same settings, ciphertexts with the same modulus size have the same scale. However, the reverse is not guaranteed.
+        // To match the scale and modulus size, multiply by a plaintext of 1 and perform rescaling.
+        // Alternatively, after a multiplication operation, one could enforce the scale to a default value during rescaling, but this can result in cumulative errors.
+        // For example, if the scale is set to 2^40, rescaling divides the scale by a very large 40-bit prime number.
+        // Since this 40-bit prime is smaller than 2^40, the scale after rescaling becomes larger than 2^40.
+        destination1 = ciphertext1;
+        destination2 = ciphertext2;
+        
+        if (destination1.coeff_modulus_size() > destination2.coeff_modulus_size()) 
+        {
+            std::swap(destination1, destination2);
+        }
+   
+        seal::Plaintext plain;
+
+        while (destination1.coeff_modulus_size() != destination2.coeff_modulus_size()) 
+        {
+            ckks_encoder_->encode(1, destination2.parms_id(), destination2.scale(), plain);
+            evaluator_->multiply_plain_inplace(destination2, plain);
+            evaluator_->relinearize_inplace(destination2, relin_keys_);
+            evaluator_->rescale_to_next_inplace(destination2);
         }
     }
 
-    seal::Ciphertext SHE::add(const seal::Ciphertext& ciphertext1, const seal::Ciphertext& ciphertext2) const {
+    void SHE::mod_scale_matching(const seal::Ciphertext& ciphertext, const seal::Plaintext& plaintext, seal::Plaintext& destination) const
+    {
+        // Verify scheme.
+        if (!(scheme_ == seal::scheme_type::ckks))
+        {
+            throw std::invalid_argument("This function is only supported for CKKS schemes.");
+        }
+
+        if (ciphertext.scale() == plaintext.scale() && ciphertext.parms_id() == plaintext.parms_id())
+        {
+            throw std::invalid_argument("이미 암호문과 평문의 모듈러스 사이즈와 스케일이 같습니다.");
+        }
+
+        if (ciphertext.scale() != plaintext.scale())
+        {
+            // If the scale of the plaintext is different, re-encoding is required.
+            // This approach can result in errors, so it is recommended to set the scale of the plaintext to match the ciphertext scale during initial encoding.
+            // If the multiplication mode is set to element-wise, FFT and IFFT operations can amplify floating-point errors.
+            std::vector<std::complex<double_t>> vec;
+            ckks_encoder_->decode(plaintext, vec, static_cast<seal::mul_mode_type>(mul_mode_));
+            ckks_encoder_->encode(vec, ciphertext.parms_id(), ciphertext.scale(), destination, static_cast<seal::mul_mode_type>(mul_mode_));
+        }
+        else if(ciphertext.parms_id() != plaintext.parms_id())
+        {
+            // If the scales are the same, only modulus switching is performed.
+            evaluator_->mod_switch_to(plaintext, ciphertext.parms_id(), destination);
+        }
+    }
+
+    void SHE::add(const seal::Ciphertext& ciphertext1, const seal::Ciphertext& ciphertext2, seal::Ciphertext& destination) const
+    {
+        auto add_cipher = [this](const seal::Ciphertext& cipher1, const seal::Ciphertext& cipher2, seal::Ciphertext& dest) 
+        {
+            evaluator_->add(cipher1, cipher2, dest);
+        };
+
+        if (scheme_ == seal::scheme_type::bgv || scheme_ == seal::scheme_type::bfv)
+        {
+            // For BGV and BFV schemes, modulus sizes of the two ciphertexts must be matched before addition.
+            if (mod_compare(ciphertext1, ciphertext2)) 
+            {
+                add_cipher(ciphertext1, ciphertext2, destination);
+            }
+            else 
+            {
+                seal::Ciphertext cipher1;
+                seal::Ciphertext cipher2;
+
+                mod_matching(ciphertext1, ciphertext2, cipher1, cipher2);
+                add_cipher(cipher1, cipher2, destination);
+            }
+        }
+        else if (scheme_ == seal::scheme_type::ckks)
+        {
+            // For CKKS schemes, modulus sizes and scales of the two ciphertexts must be matched before addition.
+            if (mod_scale_compare(ciphertext1, ciphertext2)) {
+                add_cipher(ciphertext1, ciphertext2, destination);
+            }
+            else 
+            {
+                seal::Ciphertext cipher1;
+                seal::Ciphertext cipher2;
+
+                mod_scale_matching(ciphertext1, ciphertext2, cipher1, cipher2);
+                add_cipher(cipher1, cipher2, destination);
+            }
+        }
+    }
+
+    seal::Ciphertext SHE::add(const seal::Ciphertext& ciphertext1, const seal::Ciphertext& ciphertext2) const
+    {
         seal::Ciphertext destination;
         add(ciphertext1, ciphertext2, destination);
         return destination;
     }
 
-    void SHE::add(const seal::Ciphertext& ciphertext, const seal::Plaintext& plaintext, seal::Ciphertext& destination) const {
-        evaluator_->add_plain(ciphertext, plaintext, destination);
+    void SHE::add(const seal::Ciphertext& ciphertext, const seal::Plaintext& plaintext, seal::Ciphertext& destination) const
+    {
+        auto add_plain = [this](const seal::Ciphertext& cipher, const seal::Plaintext& plain, seal::Ciphertext& dest) 
+        {
+            evaluator_->add_plain(cipher, plain, dest);
+        };
+
+        if (scheme_ == seal::scheme_type::bgv || scheme_ == seal::scheme_type::bfv)
+        {
+            // For BGV and BFV schemes, modulus switching for plaintext is not required before addition.
+            add_plain(ciphertext, plaintext, destination);
+        }
+        else if (scheme_ == seal::scheme_type::ckks)
+        {
+            // For CKKS schemes, the modulus size and scale of the plaintext must match the ciphertext before addition.
+            if (mod_scale_compare(ciphertext, plaintext))
+            {
+                add_plain(ciphertext, plaintext, destination);
+            }
+            else
+            {
+                seal::Plaintext plain;
+
+                mod_scale_matching(ciphertext, plaintext, plain);
+                add_plain(ciphertext, plain, destination);
+            }
+        }
     }
 
-    seal::Ciphertext SHE::add(const seal::Ciphertext& ciphertext, const seal::Plaintext& plaintext) const {
+    seal::Ciphertext SHE::add(const seal::Ciphertext& ciphertext, const seal::Plaintext& plaintext) const 
+    {
         seal::Ciphertext destination;
         add(ciphertext, plaintext, destination);
         return destination;
     }
 
-    void SHE::sub(const seal::Ciphertext& ciphertext1, const seal::Ciphertext& ciphertext2, seal::Ciphertext& destination) const {
-
-        auto sub_cipher = [this](const seal::Ciphertext& cipher1, const seal::Ciphertext& cipher2, seal::Ciphertext& dest) {
+    void SHE::sub(const seal::Ciphertext& ciphertext1, const seal::Ciphertext& ciphertext2, seal::Ciphertext& destination) const 
+    {
+        auto sub_cipher = [this](const seal::Ciphertext& cipher1, const seal::Ciphertext& cipher2, seal::Ciphertext& dest) 
+        {
             evaluator_->sub(cipher1, cipher2, dest);
         };
 
-        if (mod_compare(ciphertext1, ciphertext2)) {
-            sub_cipher(ciphertext1, ciphertext2, destination);
-        }
-        else {
-            seal::Ciphertext cipher1;
-            seal::Ciphertext cipher2;
+        if (scheme_ == seal::scheme_type::bgv || scheme_ == seal::scheme_type::bfv)
+        {
+            // For BGV and BFV schemes, modulus sizes of the two ciphertexts must be matched before subtraction.
+            if (mod_compare(ciphertext1, ciphertext2)) {
+                sub_cipher(ciphertext1, ciphertext2, destination);
+            }
+            else 
+            {
+                seal::Ciphertext cipher1;
+                seal::Ciphertext cipher2;
 
-            mod_matching(ciphertext1, ciphertext2, cipher1, cipher2);
-            sub_cipher(cipher1, cipher2, destination);
+                mod_matching(ciphertext1, ciphertext2, cipher1, cipher2);
+                sub_cipher(cipher1, cipher2, destination);
+            }
+        }
+        else if (scheme_ == seal::scheme_type::ckks)
+        {
+            // For CKKS schemes, modulus sizes and scales of the two ciphertexts must be matched before subtraction.
+            if (mod_scale_compare(ciphertext1, ciphertext2))
+            {
+                sub_cipher(ciphertext1, ciphertext2, destination);
+            }
+            else 
+            {
+                seal::Ciphertext cipher1;
+                seal::Ciphertext cipher2;
+
+                mod_scale_matching(ciphertext1, ciphertext2, cipher1, cipher2);
+                sub_cipher(cipher1, cipher2, destination);
+            }
         }
     }
 
-    seal::Ciphertext SHE::sub(const seal::Ciphertext& ciphertext1, const seal::Ciphertext& ciphertext2) const {
+    seal::Ciphertext SHE::sub(const seal::Ciphertext& ciphertext1, const seal::Ciphertext& ciphertext2) const 
+    {
         seal::Ciphertext destination;
         sub(ciphertext1, ciphertext2, destination);
         return destination;
     }
 
-    void SHE::sub(const seal::Ciphertext& ciphertext, const seal::Plaintext& plaintext, seal::Ciphertext& destination) const {
-        evaluator_->sub_plain(ciphertext, plaintext, destination);
+    void SHE::sub(const seal::Ciphertext& ciphertext, const seal::Plaintext& plaintext, seal::Ciphertext& destination) const 
+    {
+        auto sub_plain = [this](const seal::Ciphertext& cipher, const seal::Plaintext& plain, seal::Ciphertext& dest) 
+        {
+            evaluator_->sub_plain(cipher, plain, dest);
+        };
+
+        if (scheme_ == seal::scheme_type::bgv || scheme_ == seal::scheme_type::bfv)
+        {
+            // For BGV and BFV schemes, modulus switching for plaintext is not required before subtraction.
+            sub_plain(ciphertext, plaintext, destination);
+        }
+        else if (scheme_ == seal::scheme_type::ckks)
+        {
+            // For CKKS schemes, the modulus size and scale of the plaintext must match the ciphertext before subtraction.
+            if (mod_scale_compare(ciphertext, plaintext))
+            {
+                sub_plain(ciphertext, plaintext, destination);
+            }
+            else
+            {
+                seal::Plaintext plain;
+
+                mod_scale_matching(ciphertext, plaintext, plain);
+                sub_plain(ciphertext, plain, destination);
+            }
+        }
     }
 
-    seal::Ciphertext SHE::sub(const seal::Ciphertext& ciphertext, const seal::Plaintext& plaintext) const {
+    seal::Ciphertext SHE::sub(const seal::Ciphertext& ciphertext, const seal::Plaintext& plaintext) const 
+    {
         seal::Ciphertext destination;
         sub(ciphertext, plaintext, destination);
         return destination;
     }
 
-    void SHE::multiply(const seal::Ciphertext& ciphertext1, const seal::Ciphertext& ciphertext2, seal::Ciphertext& destination) const {
-
-        auto multiply_cipher = [this](const seal::Ciphertext& cipher1, const seal::Ciphertext& cipher2, seal::Ciphertext& dest) {
+    void SHE::multiply(const seal::Ciphertext& ciphertext1, const seal::Ciphertext& ciphertext2, seal::Ciphertext& destination) const 
+    {
+        auto multiply_cipher = [this](const seal::Ciphertext& cipher1, const seal::Ciphertext& cipher2, seal::Ciphertext& dest) 
+        {
             evaluator_->multiply(cipher1, cipher2, dest);
             evaluator_->relinearize_inplace(dest, relin_keys_);
 
-            if (dest.coeff_modulus_size() > 1) {
-                evaluator_->mod_switch_to_next_inplace(dest);
+            if (dest.coeff_modulus_size() > 1)
+            {
+                if (scheme_ == seal::scheme_type::bgv || scheme_ == seal::scheme_type::bfv)
+                {
+                    // For BGV/BFV schemes, modulus switching is performed after multiplication. Modulus size decreases after switching.
+                    evaluator_->mod_switch_to_next_inplace(dest);
+                }
+                else if (scheme_ == seal::scheme_type::ckks)
+                {
+                    // For CKKS schemes, rescaling is performed after multiplication. Both modulus size and scale decrease after rescaling.
+                    evaluator_->rescale_to_next_inplace(dest);
+                }
             }
         };
 
-        if (mod_compare(ciphertext1, ciphertext2)) {
-            multiply_cipher(ciphertext1, ciphertext2, destination);
-        }
-        else {
-            seal::Ciphertext cipher1;
-            seal::Ciphertext cipher2;
+        if (scheme_ == seal::scheme_type::bgv || scheme_ == seal::scheme_type::bfv)
+        {
+            // For BGV/BFV schemes, modulus sizes of the ciphertexts must match before multiplication.
+            if (mod_compare(ciphertext1, ciphertext2)) {
+                multiply_cipher(ciphertext1, ciphertext2, destination);
+            }
+            else 
+            {
+                seal::Ciphertext cipher1;
+                seal::Ciphertext cipher2;
 
-            mod_matching(ciphertext1, ciphertext2, cipher1, cipher2);
-            multiply_cipher(cipher1, cipher2, destination);
+                mod_matching(ciphertext1, ciphertext2, cipher1, cipher2);
+                multiply_cipher(cipher1, cipher2, destination);
+            }
+        }
+        else if (scheme_ == seal::scheme_type::ckks)
+        {
+            // For CKKS schemes, modulus sizes and scales must match before multiplication.
+            if (mod_scale_compare(ciphertext1, ciphertext2))
+            {
+                multiply_cipher(ciphertext1, ciphertext2, destination);
+            }
+            else 
+            {
+                seal::Ciphertext cipher1;
+                seal::Ciphertext cipher2;
+
+                mod_scale_matching(ciphertext1, ciphertext2, cipher1, cipher2);
+                multiply_cipher(cipher1, cipher2, destination);
+            }
         }
     }
 
-    seal::Ciphertext SHE::multiply(const seal::Ciphertext& ciphertext1, const seal::Ciphertext& ciphertext2) const {
+    seal::Ciphertext SHE::multiply(const seal::Ciphertext& ciphertext1, const seal::Ciphertext& ciphertext2) const
+    {
         seal::Ciphertext destination;
         multiply(ciphertext1, ciphertext2, destination);
         return destination;
     }
 
-    void SHE::multiply(const seal::Ciphertext& ciphertext, const seal::Plaintext& plaintext, seal::Ciphertext& destination) const {
-        evaluator_->multiply_plain(ciphertext, plaintext, destination);
-        evaluator_->relinearize_inplace(destination, relin_keys_);
+    void SHE::multiply(const seal::Ciphertext& ciphertext, const seal::Plaintext& plaintext, seal::Ciphertext& destination) const 
+    {
+        auto multiply_plain = [this](const seal::Ciphertext& cipher, const seal::Plaintext& plain, seal::Ciphertext& dest)
+        {
+            evaluator_->multiply_plain(cipher, plain, dest);
+            evaluator_->relinearize_inplace(dest, relin_keys_);
 
-        if (destination.coeff_modulus_size() > 1) {
-            evaluator_->mod_switch_to_next_inplace(destination);
+            if (dest.coeff_modulus_size() > 1)
+            {
+                if (scheme_ == seal::scheme_type::bgv || scheme_ == seal::scheme_type::bfv)
+                {
+                    // For BGV/BFV schemes, modulus switching is performed after multiplication. Modulus size decreases after switching.
+                    evaluator_->mod_switch_to_next_inplace(dest);
+                }
+                else if (scheme_ == seal::scheme_type::ckks)
+                {
+                    // For CKKS schemes, rescaling is performed after multiplication. Both modulus size and scale decrease after rescaling.
+                    evaluator_->rescale_to_next_inplace(dest);
+                }
+            }
+        };
+        
+        if (scheme_ == seal::scheme_type::bgv || scheme_ == seal::scheme_type::bfv)
+        {
+            // For BGV/BFV schemes, modulus switching for the plaintext is not required before multiplication.
+            multiply_plain(ciphertext, plaintext, destination);
+        }
+        else if (scheme_ == seal::scheme_type::ckks)
+        {
+            // For CKKS schemes, the modulus size and scale of the plaintext must match the ciphertext before multiplication.
+            if (mod_scale_compare(ciphertext, plaintext))
+            {
+                multiply_plain(ciphertext, plaintext, destination);
+            }
+            else
+            {
+                seal::Plaintext plain;
+
+                mod_scale_matching(ciphertext, plaintext, plain);
+                multiply_plain(ciphertext, plain, destination);
+            }
         }
     }
 
-    seal::Ciphertext SHE::multiply(const seal::Ciphertext& ciphertext, const seal::Plaintext& plaintext) const {
+    seal::Ciphertext SHE::multiply(const seal::Ciphertext& ciphertext, const seal::Plaintext& plaintext) const
+    {
         seal::Ciphertext destination;
         multiply(ciphertext, plaintext, destination);
         return destination;
     }
 
-    void SHE::negate(const seal::Ciphertext& ciphertext, seal::Ciphertext& destination) const {
+    void SHE::negate(const seal::Ciphertext& ciphertext, seal::Ciphertext& destination) const
+    {
         evaluator_->negate(ciphertext, destination);
     }
 
-    seal::Ciphertext SHE::negate(const seal::Ciphertext& ciphertext) const {
+    seal::Ciphertext SHE::negate(const seal::Ciphertext& ciphertext) const
+    {
         seal::Ciphertext destination;
         negate(ciphertext, destination);
         return destination;
     }
 
-    void SHE::rotate_rows(const seal::Ciphertext& ciphertext, const int32_t step, seal::Ciphertext& destination) const {
+    void SHE::rotate_rows(const seal::Ciphertext& ciphertext, const int32_t step, seal::Ciphertext& destination) const 
+    {
+        // Verify scheme.
+        if (!(scheme_ == seal::scheme_type::bgv || scheme_ == seal::scheme_type::bfv))
+        {
+            throw std::invalid_argument("This function is only supported for BGV and BFV schemes.");
+        }
+
         evaluator_->rotate_rows(ciphertext, step, galois_keys_, destination);
     }
 
-    seal::Ciphertext SHE::rotate_rows(const seal::Ciphertext& ciphertext, const int32_t step) const {
+    seal::Ciphertext SHE::rotate_rows(const seal::Ciphertext& ciphertext, const int32_t step) const
+    {
         seal::Ciphertext destination;
         rotate_rows(ciphertext, step, destination);
         return destination;
     }
 
-    void SHE::rotate_columns(const seal::Ciphertext& ciphertext, seal::Ciphertext& destination) const {
+    void SHE::rotate_columns(const seal::Ciphertext& ciphertext, seal::Ciphertext& destination) const 
+    {
+        // Verify scheme.
+        if (!(scheme_ == seal::scheme_type::bgv || scheme_ == seal::scheme_type::bfv))
+        {
+            throw std::invalid_argument("This function is only supported for BGV and BFV schemes.");
+        }
+
         evaluator_->rotate_columns(ciphertext, galois_keys_, destination);
     }
 
-    seal::Ciphertext SHE::rotate_columns(const seal::Ciphertext& ciphertext) const {
+    seal::Ciphertext SHE::rotate_columns(const seal::Ciphertext& ciphertext) const 
+    {
         seal::Ciphertext destination;
         rotate_columns(ciphertext, destination);
         return destination;
     }
 
-    void SHE::row_sum(const seal::Ciphertext& ciphertext, const int32_t range_size, seal::Ciphertext& destination) const {
-        const int32_t half_slot_count = static_cast<int32_t>(encoder_->slot_count()) / 2;
-        const int64_t logn = seal::util::get_power_of_two(static_cast<int64_t>(range_size));
+    void SHE::row_sum(const seal::Ciphertext& ciphertext, const int32_t range_size, seal::Ciphertext& destination) const 
+    {
+        // Verify scheme.
+        if (!(scheme_ == seal::scheme_type::bgv || scheme_ == seal::scheme_type::bfv))
+        {
+            throw std::invalid_argument("This function is only supported for BGV and BFV schemes.");
+        }
 
-        if (range_size < 2 || range_size > half_slot_count) {
+        const int32_t half_slot_count = static_cast<int32_t>(batch_encoder_->slot_count()) / 2;
+        const int32_t logn = seal::util::get_power_of_two(static_cast<uint64_t>(range_size));
+
+        if (range_size < 2 || range_size > half_slot_count)
+        {
             throw std::invalid_argument("The range size must be between 2 and the half slot count (inclusive).");
         }
 
-        if (logn == -1) {
+        if (logn == -1) 
+        {
             throw std::invalid_argument("The range size must be a power of 2.");
         }
 
         destination = ciphertext;
         seal::Ciphertext rotated;
 
-        for (int32_t i = 0, step = 1; i < logn; i++, step <<= 1) {
+        for (int32_t i = 0, step = 1; i < logn; i++, step <<= 1) 
+        {
             rotate_rows(destination, step, rotated);
             add(destination, rotated, destination);
         }
     }
 
-    seal::Ciphertext SHE::row_sum(const seal::Ciphertext& ciphertext, const int32_t range_size) const {
+    seal::Ciphertext SHE::row_sum(const seal::Ciphertext& ciphertext, const int32_t range_size) const 
+    {
         seal::Ciphertext destination;
         row_sum(ciphertext, range_size, destination);
         return destination;
     }
 
-    void SHE::column_sum(const seal::Ciphertext& ciphertext, seal::Ciphertext& destination) const {
+    void SHE::column_sum(const seal::Ciphertext& ciphertext, seal::Ciphertext& destination) const 
+    {
+        // Verify scheme.
+        if (!(scheme_ == seal::scheme_type::bgv || scheme_ == seal::scheme_type::bfv))
+        {
+            throw std::invalid_argument("This function is only supported for BGV and BFV schemes.");
+        }
+
         seal::Ciphertext rotated;
         rotate_columns(ciphertext, rotated);
         add(ciphertext, rotated, destination);
     }
 
-    seal::Ciphertext SHE::column_sum(const seal::Ciphertext& ciphertext) const {
+    seal::Ciphertext SHE::column_sum(const seal::Ciphertext& ciphertext) const 
+    {
         seal::Ciphertext destination;
         column_sum(ciphertext, destination);
         return destination;

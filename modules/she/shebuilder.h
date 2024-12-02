@@ -36,7 +36,7 @@ namespace she
         @param[in] mul_mode The multiplication mode (element-wise or convolution).
         @return Reference to the current SHEBuilder instance.
         */
-        SHEBuilder& default_mul_mode(const mul_mode_t mul_mode);
+        SHEBuilder& mul_mode(const mul_mode_t mul_mode);
 
         /**
         Specify whether the secret key is used.
@@ -98,6 +98,37 @@ namespace she
             const int_scheme_t scheme_type,
             const size_t poly_modulus_degree,
             const int32_t plain_modulus_bit_size,
+            const std::vector<int32_t> coeff_modulus_bit_sizes
+        ) const;
+
+
+        /**
+        Build an SHE instance for real or complex number arithmetic.
+
+        @param[in] scheme_type The real or complex number scheme type (CKKS).
+        @param[in] poly_modulus_degree The degree of the polynomial modulus.
+        @param[in] scale The scale to use for the CKKS encoder, determining precision.
+        @return A reference to the constructed SHE instance.
+        */
+        SHE& build_real_complex_scheme(
+            const real_complex_scheme_t scheme_type,
+            const size_t poly_modulus_degree,
+            const double_t scale
+        ) const;
+
+        /**
+        Build an SHE instance for real or complex number arithmetic with custom coefficient modulus sizes.
+
+        @param[in] scheme_type The real or complex number scheme type (CKKS).
+        @param[in] poly_modulus_degree The degree of the polynomial modulus.
+        @param[in] scale The scale to use for the CKKS encoder, determining precision.
+        @param[in] coeff_modulus_bit_sizes A vector of bit sizes for the coefficient modulus.
+        @return A reference to the constructed SHE instance.
+        */
+        SHE& build_real_complex_scheme(
+            const real_complex_scheme_t scheme_type,
+            const size_t poly_modulus_degree,
+            const double_t scale,
             const std::vector<int32_t> coeff_modulus_bit_sizes
         ) const;
 

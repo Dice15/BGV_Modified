@@ -26,7 +26,7 @@ add_executable(bgv_modified
     # Random Generator Modules
     "modules/random/randomgenerator.h"
     "modules/random/randomgenerator.cpp"
-)
+ "modules/simulator/patternmatch.h" "modules/simulator/patternmatch.cpp")
 
 # MS SEAL
 find_package(SEAL REQUIRED PATHS ${SEAL_DIR})

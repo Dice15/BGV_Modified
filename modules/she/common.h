@@ -39,7 +39,7 @@ namespace she
     /**
     Enumeration of real arithmetic schemes.
     */
-    enum class real_scheme_t : std::uint8_t
+    enum class real_complex_scheme_t : std::uint8_t
     {
         // Cheon-Kim-Kim-Song scheme
         ckks = 0x2,
