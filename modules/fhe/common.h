@@ -1,6 +1,6 @@
 #pragma once
 
-namespace she
+namespace fhe
 {
     /**
     Enumeration of security levels for the SHE library.

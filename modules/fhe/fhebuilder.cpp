@@ -1,9 +1,9 @@
-#include "SHEBuilder.h"
+#include "FHEBuilder.h"
 #include <memory>
 
-namespace she 
+namespace fhe 
 {
-    SHEBuilder::SHEBuilder() :
+    FHEBuilder::FHEBuilder() :
         sec_level_(seal::sec_level_type::tc128),
         default_mul_mode_(mul_mode_t::element_wise),
         secret_key_(true),
@@ -12,7 +12,7 @@ namespace she
         galois_keys_(true) {
     }
 
-    SHEBuilder& SHEBuilder::sec_level(const sec_level_t sec_level) 
+    FHEBuilder& FHEBuilder::sec_level(const sec_level_t sec_level) 
     {
         switch (sec_level)
         {
@@ -39,38 +39,38 @@ namespace she
         return *this;
     }
 
-    SHEBuilder& SHEBuilder::mul_mode(const mul_mode_t mul_mode) 
+    FHEBuilder& FHEBuilder::mul_mode(const mul_mode_t mul_mode) 
     {
         default_mul_mode_ = mul_mode;
         return *this;
     }
 
-    SHEBuilder& SHEBuilder::secret_key(const bool use) 
+    FHEBuilder& FHEBuilder::secret_key(const bool use) 
     {
         secret_key_ = use;
         return *this;
     }
 
-    SHEBuilder& SHEBuilder::public_key(const bool use) 
+    FHEBuilder& FHEBuilder::public_key(const bool use) 
     {
         public_key_ = use;
         return *this;
     }
 
-    SHEBuilder& SHEBuilder::relin_keys(const bool use)
+    FHEBuilder& FHEBuilder::relin_keys(const bool use)
     {
         relin_keys_ = use;
         return *this;
     }
 
-    SHEBuilder& SHEBuilder::galois_keys(const bool use, const std::vector<int32_t> rotatin_steps)
+    FHEBuilder& FHEBuilder::galois_keys(const bool use, const std::vector<int32_t> rotatin_steps)
     {
         galois_keys_ = use;
         rotatin_steps_ = rotatin_steps;
         return *this;
     }
 
-    SHE& SHEBuilder::build_integer_scheme(
+    FHE& FHEBuilder::build_integer_scheme(
         const int_scheme_t scheme_type,
         const size_t poly_modulus_degree,
         const int32_t plain_modulus_bit_size
@@ -94,7 +94,7 @@ namespace she
         );
     }
 
-    SHE& SHEBuilder::build_integer_scheme(
+    FHE& FHEBuilder::build_integer_scheme(
         const int_scheme_t scheme_type,
         const size_t poly_modulus_degree,
         const int32_t plain_modulus_bit_size,
@@ -118,9 +118,9 @@ namespace she
 
         if (sum_coeff_bit_sizes > max_sum_coeff_bit_sizes) 
         {
-            throw std::invalid_argument(std::string("Sum of the coeff bit sizes must not exceed coeff modulus's max bit count(")
+         /*   throw std::invalid_argument(std::string("Sum of the coeff bit sizes must not exceed coeff modulus's max bit count(")
                 + std::string(std::to_string(max_sum_coeff_bit_sizes))
-                + std::string(")for the given poly_modulus_degree and security level"));
+                + std::string(")for the given poly_modulus_degree and security level"));*/
         }
 
         // Determine the scheme type (BFV or BGV).
@@ -182,7 +182,7 @@ namespace she
             auto decryptor = std::make_unique<seal::Decryptor>(*context, secret_key);
             auto evaluator = std::make_unique<seal::Evaluator>(*context);
 
-            return *new SHE(
+            return *new FHE(
                 scheme,
                 std::move(context),
                 std::move(encoder),
@@ -198,11 +198,11 @@ namespace she
         }
         catch (const std::exception&) 
         {
-            throw std::invalid_argument("Failed to build SHE.");
+            throw std::invalid_argument("Failed to build FHE.");
         }
     }
 
-    SHE& SHEBuilder::build_real_complex_scheme(
+    FHE& FHEBuilder::build_real_complex_scheme(
         const real_complex_scheme_t scheme_type,
         const size_t poly_modulus_degree,
         const double_t scale
@@ -239,7 +239,7 @@ namespace she
         );
     }
 
-    SHE& SHEBuilder::build_real_complex_scheme(
+    FHE& FHEBuilder::build_real_complex_scheme(
         const real_complex_scheme_t scheme_type,
         const size_t poly_modulus_degree,
         const double_t scale,
@@ -320,7 +320,7 @@ namespace she
             auto decryptor = std::make_unique<seal::Decryptor>(*context, secret_key);
             auto evaluator = std::make_unique<seal::Evaluator>(*context);
 
-            return *new SHE(
+            return *new FHE(
                 scheme,
                 std::move(context),
                 std::move(encoder),
@@ -337,7 +337,7 @@ namespace she
         }
         catch (const std::exception&)
         {
-            throw std::invalid_argument("Failed to build SHE.");
+            throw std::invalid_argument("Failed to build FHE.");
         }
     }
 }

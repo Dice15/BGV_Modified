@@ -6,16 +6,16 @@
 #include <complex>
 #include <memory>
 
-namespace she
+namespace fhe
 {
     /**
-    @class SHE
-    A class implementing Somewhat Homomorphic Encryption (SHE) functionality using Microsoft SEAL.
+    @class FHE
+    A class implementing Fully Homomorphic Encryption (FHE) functionality using Microsoft SEAL.
     This class provides high-level APIs for encoding, decoding, encryption, decryption, and
     performing arithmetic operations on encrypted data.
 
     @details
-    SHE encapsulates the following components:
+    FHE encapsulates the following components:
     - SEALContext: Manages encryption parameters and their validation.
     - BatchEncoder: Encodes/decodes plaintexts for batching operations.
     - Encryptor: Encrypts plaintexts into ciphertexts.
@@ -23,7 +23,7 @@ namespace she
     - Evaluator: Performs arithmetic operations on ciphertexts.
     - Key management: Includes secret, public, relinearization, and Galois keys.
     */
-    class SHE
+    class FHE
     {
     public:
         /**
@@ -40,7 +40,7 @@ namespace she
         @param[in] relin_keys Relinearization keys for ciphertext operations.
         @param[in] galois_keys Galois keys for rotation operations.
         */
-        SHE(
+        FHE(
             seal::scheme_type scheme,
             std::unique_ptr<seal::SEALContext> context,
             std::unique_ptr<seal::BatchEncoder> batch_encoder,
@@ -68,7 +68,7 @@ namespace she
         @param[in] relin_keys Relinearization keys for ciphertext operations.
         @param[in] galois_keys Galois keys for rotation operations.
         */
-        SHE(
+        FHE(
             seal::scheme_type scheme,
             std::unique_ptr<seal::SEALContext> context,
             std::unique_ptr<seal::CKKSEncoder> ckks_encoder,
@@ -143,7 +143,7 @@ namespace she
 
         @throws std::invalid_argument If the scheme is not BGV or BFV.
         */
-        void plain_modulus_prime(uint64_t& destination) const;
+        void plain_modulus(uint64_t& destination) const;
 
         /**
          Retrieves the plain modulus value used in the encryption scheme.
@@ -155,7 +155,12 @@ namespace she
 
          @throws std::invalid_argument If the scheme is not BGV or BFV.
          */
-        uint64_t plain_modulus_prime() const; 
+        uint64_t plain_modulus() const; 
+
+
+        void total_coeff_modulus_bit(uint64_t& destination) const;
+
+        uint64_t total_coeff_modulus_bit() const;
 
         /**
         Computes the primitive root modulo the plain modulus for the given value.

@@ -1,9 +1,9 @@
-#include "she.h"
+#include "FHE.h"
 #include <stdexcept>
 
-namespace she
+namespace fhe
 {
-    SHE::SHE(
+    FHE::FHE(
         seal::scheme_type scheme,
         std::unique_ptr<seal::SEALContext> context,
         std::unique_ptr<seal::BatchEncoder> batch_encoder,
@@ -30,7 +30,7 @@ namespace she
         galois_keys_(galois_keys) {
     }
 
-    SHE::SHE(
+    FHE::FHE(
         seal::scheme_type scheme,
         std::unique_ptr<seal::SEALContext> context,
         std::unique_ptr<seal::CKKSEncoder> ckks_encoder,
@@ -59,7 +59,7 @@ namespace she
         galois_keys_(galois_keys) {
     }
 
-    void SHE::scheme(std::string& destination) const 
+    void FHE::scheme(std::string& destination) const 
     {
         switch (scheme_)
         {
@@ -78,14 +78,14 @@ namespace she
         }
     }
 
-    std::string SHE::scheme() const
+    std::string FHE::scheme() const
     {
         std::string destination;
         scheme(destination);
         return destination;
     }
 
-    void SHE::slot_count(size_t& destination) const
+    void FHE::slot_count(size_t& destination) const
     {
         if (scheme_ == seal::scheme_type::bgv || scheme_ == seal::scheme_type::bfv)
         {
@@ -97,14 +97,14 @@ namespace she
         }
     }
 
-    size_t SHE::slot_count() const
+    size_t FHE::slot_count() const
     {
         size_t destination = -1;
         slot_count(destination);
         return destination;
     }
 
-    void SHE::plain_modulus_prime(uint64_t& destination) const
+    void FHE::plain_modulus(uint64_t& destination) const
     {
         // Verify scheme.
         if (!(scheme_ == seal::scheme_type::bgv || scheme_ == seal::scheme_type::bfv))
@@ -115,14 +115,26 @@ namespace she
         destination = context_->key_context_data()->parms().plain_modulus().value();
     }
 
-    uint64_t SHE::plain_modulus_prime() const
+    uint64_t FHE::plain_modulus() const
     {
         uint64_t destination = -1;
-        plain_modulus_prime(destination);
+        plain_modulus(destination);
         return destination;
     }
 
-    void SHE::plain_modulus_primitive_root(const uint64_t n, uint64_t& destination) const 
+    void FHE::total_coeff_modulus_bit(uint64_t& destination) const
+    {
+        destination = context_->first_context_data()->total_coeff_modulus_bit_count();
+    }
+
+    uint64_t FHE::total_coeff_modulus_bit() const
+    {
+        uint64_t destination = -1;
+        total_coeff_modulus_bit(destination);
+        return destination;
+    }
+
+    void FHE::plain_modulus_primitive_root(const uint64_t n, uint64_t& destination) const 
     {
         // Verify scheme.
         if (!(scheme_ == seal::scheme_type::bgv || scheme_ == seal::scheme_type::bfv)) 
@@ -137,14 +149,14 @@ namespace she
         }
     }
 
-    uint64_t SHE::plain_modulus_primitive_root(const uint64_t n) const
+    uint64_t FHE::plain_modulus_primitive_root(const uint64_t n) const
     {
         uint64_t destination = -1;
         plain_modulus_primitive_root(n, destination);
         return destination;
     }
 
-    void SHE::scale(double_t& destination) const 
+    void FHE::scale(double_t& destination) const 
     {
         // Verify scheme.
         if (!(scheme_ == seal::scheme_type::ckks)) 
@@ -155,43 +167,43 @@ namespace she
         destination = scale_;
     }
 
-    double_t SHE::scale() const 
+    double_t FHE::scale() const 
     {
         double_t destination = -1;
         scale(destination);
         return destination;
     }
 
-    mul_mode_t& SHE::mul_mode()
+    mul_mode_t& FHE::mul_mode()
     {
         return mul_mode_;
     }
 
-    void SHE::encrypt(const seal::Plaintext& plaintext, seal::Ciphertext& destination) const 
+    void FHE::encrypt(const seal::Plaintext& plaintext, seal::Ciphertext& destination) const 
     {
         encryptor_->encrypt(plaintext, destination);
     }
 
-    seal::Ciphertext SHE::encrypt(const seal::Plaintext& plaintext) const
+    seal::Ciphertext FHE::encrypt(const seal::Plaintext& plaintext) const
     {
         seal::Ciphertext destination;
         encrypt(plaintext, destination);
         return destination;
     }
 
-    void SHE::decrypt(const seal::Ciphertext& ciphertext, seal::Plaintext& destination) const
+    void FHE::decrypt(const seal::Ciphertext& ciphertext, seal::Plaintext& destination) const
     {
         decryptor_->decrypt(ciphertext, destination);
     }
 
-    seal::Plaintext SHE::decrypt(const seal::Ciphertext& ciphertext) const
+    seal::Plaintext FHE::decrypt(const seal::Ciphertext& ciphertext) const
     {
         seal::Plaintext destination;
         decrypt(ciphertext, destination);
         return destination;
     }
 
-    bool SHE::mod_compare(const seal::Ciphertext& ciphertext1, const seal::Ciphertext& ciphertext2) const
+    bool FHE::mod_compare(const seal::Ciphertext& ciphertext1, const seal::Ciphertext& ciphertext2) const
     {
         // Verify scheme.
         if (!(scheme_ == seal::scheme_type::bgv || scheme_ == seal::scheme_type::bfv))
@@ -203,7 +215,7 @@ namespace she
         return ciphertext1.coeff_modulus_size() == ciphertext2.coeff_modulus_size();
     }
 
-    void SHE::mod_matching(const seal::Ciphertext& ciphertext1, const seal::Ciphertext& ciphertext2, seal::Ciphertext& destination1, seal::Ciphertext& destination2) const
+    void FHE::mod_matching(const seal::Ciphertext& ciphertext1, const seal::Ciphertext& ciphertext2, seal::Ciphertext& destination1, seal::Ciphertext& destination2) const
     {
         // Verify scheme.
         if (!(scheme_ == seal::scheme_type::bgv || scheme_ == seal::scheme_type::bfv))
@@ -230,7 +242,7 @@ namespace she
         }
     }
 
-    bool SHE::mod_scale_compare(const seal::Ciphertext& ciphertext1, const seal::Ciphertext& ciphertext2) const
+    bool FHE::mod_scale_compare(const seal::Ciphertext& ciphertext1, const seal::Ciphertext& ciphertext2) const
     {
         // Verify scheme.
         if (!(scheme_ == seal::scheme_type::ckks))
@@ -242,7 +254,7 @@ namespace she
         return ciphertext1.coeff_modulus_size() == ciphertext2.coeff_modulus_size() && ciphertext1.scale() == ciphertext2.scale();
     }
 
-    bool SHE::mod_scale_compare(const seal::Ciphertext& ciphertext, const seal::Plaintext& plaintext) const
+    bool FHE::mod_scale_compare(const seal::Ciphertext& ciphertext, const seal::Plaintext& plaintext) const
     {
         // Verify scheme.
         if (!(scheme_ == seal::scheme_type::ckks))
@@ -254,7 +266,7 @@ namespace she
         return ciphertext.parms_id() == plaintext.parms_id() && ciphertext.scale() == plaintext.scale();
     }
 
-    void SHE::mod_scale_matching(const seal::Ciphertext& ciphertext1, const seal::Ciphertext& ciphertext2, seal::Ciphertext& destination1, seal::Ciphertext& destination2) const
+    void FHE::mod_scale_matching(const seal::Ciphertext& ciphertext1, const seal::Ciphertext& ciphertext2, seal::Ciphertext& destination1, seal::Ciphertext& destination2) const
     {
         // Verify scheme.
         if (!(scheme_ == seal::scheme_type::ckks))
@@ -291,7 +303,7 @@ namespace she
         }
     }
 
-    void SHE::mod_scale_matching(const seal::Ciphertext& ciphertext, const seal::Plaintext& plaintext, seal::Plaintext& destination) const
+    void FHE::mod_scale_matching(const seal::Ciphertext& ciphertext, const seal::Plaintext& plaintext, seal::Plaintext& destination) const
     {
         // Verify scheme.
         if (!(scheme_ == seal::scheme_type::ckks))
@@ -320,7 +332,7 @@ namespace she
         }
     }
 
-    void SHE::add(const seal::Ciphertext& ciphertext1, const seal::Ciphertext& ciphertext2, seal::Ciphertext& destination) const
+    void FHE::add(const seal::Ciphertext& ciphertext1, const seal::Ciphertext& ciphertext2, seal::Ciphertext& destination) const
     {
         auto add_cipher = [this](const seal::Ciphertext& cipher1, const seal::Ciphertext& cipher2, seal::Ciphertext& dest) 
         {
@@ -360,14 +372,14 @@ namespace she
         }
     }
 
-    seal::Ciphertext SHE::add(const seal::Ciphertext& ciphertext1, const seal::Ciphertext& ciphertext2) const
+    seal::Ciphertext FHE::add(const seal::Ciphertext& ciphertext1, const seal::Ciphertext& ciphertext2) const
     {
         seal::Ciphertext destination;
         add(ciphertext1, ciphertext2, destination);
         return destination;
     }
 
-    void SHE::add(const seal::Ciphertext& ciphertext, const seal::Plaintext& plaintext, seal::Ciphertext& destination) const
+    void FHE::add(const seal::Ciphertext& ciphertext, const seal::Plaintext& plaintext, seal::Ciphertext& destination) const
     {
         auto add_plain = [this](const seal::Ciphertext& cipher, const seal::Plaintext& plain, seal::Ciphertext& dest) 
         {
@@ -396,14 +408,14 @@ namespace she
         }
     }
 
-    seal::Ciphertext SHE::add(const seal::Ciphertext& ciphertext, const seal::Plaintext& plaintext) const 
+    seal::Ciphertext FHE::add(const seal::Ciphertext& ciphertext, const seal::Plaintext& plaintext) const 
     {
         seal::Ciphertext destination;
         add(ciphertext, plaintext, destination);
         return destination;
     }
 
-    void SHE::sub(const seal::Ciphertext& ciphertext1, const seal::Ciphertext& ciphertext2, seal::Ciphertext& destination) const 
+    void FHE::sub(const seal::Ciphertext& ciphertext1, const seal::Ciphertext& ciphertext2, seal::Ciphertext& destination) const 
     {
         auto sub_cipher = [this](const seal::Ciphertext& cipher1, const seal::Ciphertext& cipher2, seal::Ciphertext& dest) 
         {
@@ -443,14 +455,14 @@ namespace she
         }
     }
 
-    seal::Ciphertext SHE::sub(const seal::Ciphertext& ciphertext1, const seal::Ciphertext& ciphertext2) const 
+    seal::Ciphertext FHE::sub(const seal::Ciphertext& ciphertext1, const seal::Ciphertext& ciphertext2) const 
     {
         seal::Ciphertext destination;
         sub(ciphertext1, ciphertext2, destination);
         return destination;
     }
 
-    void SHE::sub(const seal::Ciphertext& ciphertext, const seal::Plaintext& plaintext, seal::Ciphertext& destination) const 
+    void FHE::sub(const seal::Ciphertext& ciphertext, const seal::Plaintext& plaintext, seal::Ciphertext& destination) const 
     {
         auto sub_plain = [this](const seal::Ciphertext& cipher, const seal::Plaintext& plain, seal::Ciphertext& dest) 
         {
@@ -479,14 +491,14 @@ namespace she
         }
     }
 
-    seal::Ciphertext SHE::sub(const seal::Ciphertext& ciphertext, const seal::Plaintext& plaintext) const 
+    seal::Ciphertext FHE::sub(const seal::Ciphertext& ciphertext, const seal::Plaintext& plaintext) const 
     {
         seal::Ciphertext destination;
         sub(ciphertext, plaintext, destination);
         return destination;
     }
 
-    void SHE::multiply(const seal::Ciphertext& ciphertext1, const seal::Ciphertext& ciphertext2, seal::Ciphertext& destination) const 
+    void FHE::multiply(const seal::Ciphertext& ciphertext1, const seal::Ciphertext& ciphertext2, seal::Ciphertext& destination) const 
     {
         auto multiply_cipher = [this](const seal::Ciphertext& cipher1, const seal::Ciphertext& cipher2, seal::Ciphertext& dest) 
         {
@@ -541,14 +553,14 @@ namespace she
         }
     }
 
-    seal::Ciphertext SHE::multiply(const seal::Ciphertext& ciphertext1, const seal::Ciphertext& ciphertext2) const
+    seal::Ciphertext FHE::multiply(const seal::Ciphertext& ciphertext1, const seal::Ciphertext& ciphertext2) const
     {
         seal::Ciphertext destination;
         multiply(ciphertext1, ciphertext2, destination);
         return destination;
     }
 
-    void SHE::multiply(const seal::Ciphertext& ciphertext, const seal::Plaintext& plaintext, seal::Ciphertext& destination) const 
+    void FHE::multiply(const seal::Ciphertext& ciphertext, const seal::Plaintext& plaintext, seal::Ciphertext& destination) const 
     {
         auto multiply_plain = [this](const seal::Ciphertext& cipher, const seal::Plaintext& plain, seal::Ciphertext& dest)
         {
@@ -592,26 +604,26 @@ namespace she
         }
     }
 
-    seal::Ciphertext SHE::multiply(const seal::Ciphertext& ciphertext, const seal::Plaintext& plaintext) const
+    seal::Ciphertext FHE::multiply(const seal::Ciphertext& ciphertext, const seal::Plaintext& plaintext) const
     {
         seal::Ciphertext destination;
         multiply(ciphertext, plaintext, destination);
         return destination;
     }
 
-    void SHE::negate(const seal::Ciphertext& ciphertext, seal::Ciphertext& destination) const
+    void FHE::negate(const seal::Ciphertext& ciphertext, seal::Ciphertext& destination) const
     {
         evaluator_->negate(ciphertext, destination);
     }
 
-    seal::Ciphertext SHE::negate(const seal::Ciphertext& ciphertext) const
+    seal::Ciphertext FHE::negate(const seal::Ciphertext& ciphertext) const
     {
         seal::Ciphertext destination;
         negate(ciphertext, destination);
         return destination;
     }
 
-    void SHE::rotate_rows(const seal::Ciphertext& ciphertext, const int32_t step, seal::Ciphertext& destination) const 
+    void FHE::rotate_rows(const seal::Ciphertext& ciphertext, const int32_t step, seal::Ciphertext& destination) const 
     {
         // Verify scheme.
         if (!(scheme_ == seal::scheme_type::bgv || scheme_ == seal::scheme_type::bfv))
@@ -622,14 +634,14 @@ namespace she
         evaluator_->rotate_rows(ciphertext, step, galois_keys_, destination);
     }
 
-    seal::Ciphertext SHE::rotate_rows(const seal::Ciphertext& ciphertext, const int32_t step) const
+    seal::Ciphertext FHE::rotate_rows(const seal::Ciphertext& ciphertext, const int32_t step) const
     {
         seal::Ciphertext destination;
         rotate_rows(ciphertext, step, destination);
         return destination;
     }
 
-    void SHE::rotate_columns(const seal::Ciphertext& ciphertext, seal::Ciphertext& destination) const 
+    void FHE::rotate_columns(const seal::Ciphertext& ciphertext, seal::Ciphertext& destination) const 
     {
         // Verify scheme.
         if (!(scheme_ == seal::scheme_type::bgv || scheme_ == seal::scheme_type::bfv))
@@ -640,14 +652,14 @@ namespace she
         evaluator_->rotate_columns(ciphertext, galois_keys_, destination);
     }
 
-    seal::Ciphertext SHE::rotate_columns(const seal::Ciphertext& ciphertext) const 
+    seal::Ciphertext FHE::rotate_columns(const seal::Ciphertext& ciphertext) const 
     {
         seal::Ciphertext destination;
         rotate_columns(ciphertext, destination);
         return destination;
     }
 
-    void SHE::row_sum(const seal::Ciphertext& ciphertext, const int32_t range_size, seal::Ciphertext& destination) const 
+    void FHE::row_sum(const seal::Ciphertext& ciphertext, const int32_t range_size, seal::Ciphertext& destination) const 
     {
         // Verify scheme.
         if (!(scheme_ == seal::scheme_type::bgv || scheme_ == seal::scheme_type::bfv))
@@ -678,14 +690,14 @@ namespace she
         }
     }
 
-    seal::Ciphertext SHE::row_sum(const seal::Ciphertext& ciphertext, const int32_t range_size) const 
+    seal::Ciphertext FHE::row_sum(const seal::Ciphertext& ciphertext, const int32_t range_size) const 
     {
         seal::Ciphertext destination;
         row_sum(ciphertext, range_size, destination);
         return destination;
     }
 
-    void SHE::column_sum(const seal::Ciphertext& ciphertext, seal::Ciphertext& destination) const 
+    void FHE::column_sum(const seal::Ciphertext& ciphertext, seal::Ciphertext& destination) const 
     {
         // Verify scheme.
         if (!(scheme_ == seal::scheme_type::bgv || scheme_ == seal::scheme_type::bfv))
@@ -698,7 +710,7 @@ namespace she
         add(ciphertext, rotated, destination);
     }
 
-    seal::Ciphertext SHE::column_sum(const seal::Ciphertext& ciphertext) const 
+    seal::Ciphertext FHE::column_sum(const seal::Ciphertext& ciphertext) const 
     {
         seal::Ciphertext destination;
         column_sum(ciphertext, destination);
